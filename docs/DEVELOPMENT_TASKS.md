@@ -1,5 +1,7 @@
 # Ordered implementation tasks
 
+> **V1 implementation amendment, 2026-11-16:** The owner authorized implementation after plan review. The core local workflow is implemented and verified with automated tests and independent browser/core review. Reference labels, evaluation tables and measured business KPIs remain deferred. The original task list below is preserved as design history. See [V1_GUIDE.md](V1_GUIDE.md) and [V1_VERIFICATION.md](V1_VERIFICATION.md) for current scope and evidence.
+
 These are future tasks, not code delivered by the planning branch. **Show the final plan to the owner and wait for a separate implementation request before T1.** Dependencies include both the software inventory in [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) and the task prerequisites below. No pull request is required to review this plan.
 
 Use [DATA_MODEL.md](DATA_MODEL.md) for exact identity, persistence, and JSON rules, [EVALUATION.md](EVALUATION.md) for reference labels and metric formulas, and [RISKS.md](RISKS.md) for local verification gates. Keep the existing repository requirements unchanged. No personal videos, images, weights, credentials, or exports enter Git.

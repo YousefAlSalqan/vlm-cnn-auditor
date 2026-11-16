@@ -1,0 +1,26 @@
+.gradio-container { width: 100% !important; min-width: 0 !important; max-width: 1380px !important; margin: 0 auto; padding: 28px 24px !important; box-sizing: border-box; }
+.gradio-container > .main, .gradio-container > .main > .wrap, .gradio-container .contain { width: 100%; min-width: 0 !important; max-width: 100%; box-sizing: border-box; }
+.gradio-container .column { min-width: 0; }
+#decision-history { min-width: 0 !important; max-width: 100%; overflow-x: auto; }
+#decision-history > div { min-width: 0; max-width: 100%; }
+body { background: #f4f6f8; }
+#masthead { display: flex; justify-content: space-between; gap: 24px; align-items: center; padding: 12px 0 24px; border-bottom: 1px solid #d6dfe5; margin-bottom: 10px; }
+#masthead .eyebrow { font-size: 11px; letter-spacing: .15em; color: #526873; font-weight: 700; }
+#masthead h1 { margin: 8px 0 7px; color: #172f3c; font-size: clamp(26px, 4vw, 36px); letter-spacing: -.035em; font-weight: 650; }
+#masthead p { margin: 0; color: #526873; font-size: 15px; line-height: 1.5; }
+.local-badge { flex-shrink: 0; background: #e2efe9; color: #205d48; border: 1px solid #bdd5c9; border-radius: 4px; padding: 7px 10px; font-size: 10px; letter-spacing: .08em; font-weight: 700; }
+#system-status { margin-bottom: 12px; }
+#workspace { gap: 24px; align-items: flex-start; }
+#sidebar { padding: 18px; background: #edf1f4; border: 1px solid #d9e1e6; border-radius: 8px; }
+#evidence-panel { padding: 18px 22px; background: #fff; border: 1px solid #d9e1e6; border-radius: 8px; }
+#frame-pair { gap: 14px; }
+#evidence-panel h3, #sidebar h3 { margin-top: 4px; color: #193c49; font-size: 17px; font-weight: 650; }
+button:focus-visible { outline: 3px solid #00897b !important; outline-offset: 3px; }
+@media (max-width: 850px) {
+  .gradio-container { padding: 12px !important; }
+  #workspace { flex-direction: column; gap: 16px; }
+  #sidebar, #evidence-panel { width: 100% !important; min-width: 0 !important; padding: 15px; }
+  #masthead { align-items: flex-start; gap: 12px; }
+  .local-badge { padding: 5px 7px; font-size: 9px; }
+}
+@media (max-width: 500px) { #frame-pair { flex-direction: column; } }

@@ -2,21 +2,29 @@
 
 A model-agnostic quality-assurance layer for computer-vision deployments. The first demo audits **YOLO cup detections (COCO class 41)** using **Qwen3-VL**, records suspected errors with frame-level evidence, and allows a human reviewer to accept or reject suggested corrections.
 
-> Status: implementation plan prepared for owner review. Application coding has not started and requires a separate request.
+> Status: first working local version. Eight core PostgreSQL tables, Gradio review UI, YOLO/Qwen integration and verified exports are implemented. Independent labels and business evaluation remain deferred.
+
+## Run the prepared Windows workspace
+
+Double-click **`start-auditor.cmd`**, or run `.\scripts\start-local.ps1` from the checkout. Open **http://127.0.0.1:7860**.
+
+The launcher checks the schema, FFprobe, YOLO checkpoint and local Qwen installation. It can start existing portable services configured in your private `.env`. It does not install software or initialize databases. Other machines need the [setup and recovery guide](docs/V1_GUIDE.md).
 
 ## First demonstration
 1. Record a 15–30 second phone video of a cup under normal, occluded, empty-scene, and poor-light conditions.
-2. Upload the video via Gradio; save the original file to local session storage.
+2. Transfer the video to the laptop by USB. Upload through Gradio, click Save video, then click Start analysis separately.
 3. Use OpenCV to extract sampled frames, retaining source frame index, video timestamp, and stable IDs.
 4. Run YOLO (cup class 41) and save raw images, rendered annotations, bounding boxes, class labels and confidences.
 5. Ask Qwen3-VL to compare original frames, annotated frames and structured detections against four rules: possible missed cup, false positive, duplicate and count mismatch.
 6. Validate the model's structured findings, persist artifacts and metadata, and show synchronized evidence in a review UI.
-7. Accept/reject suspected errors. Reviewed decisions become labels for evaluation, not automatic model retraining.
+7. Accept, reject or defer each finding with a note. Decisions remain separate from predictions and independent reference labels. Nothing automatically retrains the model.
+
+Media defaults to `~/vlm-cnn-auditor-data/session_<UUID>/`. `DATA_ROOT` changes that location. PostgreSQL owns metadata and decisions. See the [actual V1 database diagram](docs/V1_GUIDE.md#actual-database-architecture).
 
 ## Key principle
 A VLM's suggestion is **not ground truth**. Separate raw YOLO predictions, VLM proposals, and verified human labels. The original video and raw frames must never be overwritten.
 
-## Proposed stack
+## Stack and verification
 - Python, OpenCV and Ultralytics YOLO (check licensing for redistribution)
 - Qwen3-VL 2B via Ollama for local image inference (adapter should permit a future Transformers backend)
 - Gradio for upload, frame-by-frame comparison and feedback
@@ -24,7 +32,21 @@ A VLM's suggestion is **not ground truth**. Separate raw YOLO predictions, VLM p
 - FastAPI **optional in the first MVP**; use direct Python functions from Gradio to ship sooner
 - Pytest for unit/integration tests, with fake model responses for CI
 
+Direct versions are in [pyproject.toml](pyproject.toml). The tested Windows Python 3.11 CPU environment is frozen in [requirements-cpu.lock](requirements-cpu.lock). Tests require a separate PostgreSQL database named `auditor_test*`.
+
+```powershell
+$env:AUDITOR_TEST_DATABASE_URL = 'postgresql+psycopg://TEST_ROLE:TEST_PASSWORD@127.0.0.1:5432/auditor_test_v1'
+$env:AUDITOR_BROWSER_TESTS = '1'
+.\.venv\Scripts\python.exe -m playwright install chromium
+.\.venv\Scripts\python.exe -m pytest -q
+.\.venv\Scripts\python.exe -m ruff check .
+```
+
+CI uses synthetic footage and fake models. Separate local smoke checks use real YOLO and Qwen. Personal-footage accuracy, physical-phone compatibility and business savings still need human testing.
+
 ## Repo docs
+- [V1 guide, setup, flow and actual database architecture](docs/V1_GUIDE.md)
+- [V1 verification and review results](docs/V1_VERIFICATION.md)
 - [Agent instructions](AGENTS.md)
 - [Requirements and architecture constraints](docs/PROJECT_BRIEF.md)
 - [Cloud agent planning assignment](docs/PLAN_REQUEST.md)
