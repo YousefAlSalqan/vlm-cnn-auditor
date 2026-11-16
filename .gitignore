@@ -1,0 +1,28 @@
+# Runtime media and model files
+data/
+uploads/
+exports/
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.jpg
+*.jpeg
+*.png
+*.webp
+*.pt
+*.onnx
+*.safetensors
+# Credentials and local environments
+.env
+.env.*
+!.env.example
+.venv/
+venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+*.sqlite
+*.sqlite3
+postgres_data/
+.DS_Store
