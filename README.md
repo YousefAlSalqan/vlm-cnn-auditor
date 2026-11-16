@@ -2,7 +2,7 @@
 
 A model-agnostic quality-assurance layer for computer-vision deployments. The first demo audits **YOLO cup detections (COCO class 41)** using **Qwen3-VL**, records suspected errors with frame-level evidence, and allows a human reviewer to accept or reject suggested corrections.
 
-> Status: project brief prepared; cloud coding agent has **not** yet authored the implementation plan or the application.
+> Status: implementation plan prepared for owner review. Application coding has not started and requires a separate request.
 
 ## First demonstration
 1. Record a 15–30 second phone video of a cup under normal, occluded, empty-scene, and poor-light conditions.
@@ -28,5 +28,10 @@ A VLM's suggestion is **not ground truth**. Separate raw YOLO predictions, VLM p
 - [Agent instructions](AGENTS.md)
 - [Requirements and architecture constraints](docs/PROJECT_BRIEF.md)
 - [Cloud agent planning assignment](docs/PLAN_REQUEST.md)
+- [Implementation plan, architecture, and dependencies](docs/IMPLEMENTATION_PLAN.md)
+- [Data model, frame synchronization, and export contract](docs/DATA_MODEL.md)
+- [Evaluation, testing, and business KPIs](docs/EVALUATION.md)
+- [Risks, privacy, and licensing gates](docs/RISKS.md)
+- [Ordered development tasks and acceptance checks](docs/DEVELOPMENT_TASKS.md)
 
 Videos, frames, model weights, PII, and database credentials must remain out of git. This project is independent of any specific company.
