@@ -19,13 +19,15 @@ Upload a 15–30 second MP4 or MOV, save it, then start analysis. Both models pr
 
 The Gradio interface shows the raw frame, YOLO overlay, Qwen observations and decision history. Each frame retains its source index, presentation timestamp and stable session/frame identity. PostgreSQL stores metadata and decisions. Original video, JPEG pairs, per-frame JSON and exports stay on local disk.
 
+An optional [reviewed cup dataset workflow](docs/DATASET_REVIEW.md) combines saved evidence into local dataset files. It starts OFF. When enabled, you can request box proposals from the same Qwen model, add or correct boxes, and review every frame. Approving the dataset queues fine-tuning from existing weights and saves a separate cup-model candidate. Earlier reviews and frozen dataset versions remain available.
+
 ## What has been demonstrated
 
 On one 27-second video, the prompt experiments produced additional review leads for hanging mugs and a red-handled mug. YOLO also missed those examples when given the identical crops. Other examples were explained by cropping alone, and one proposed glass-cup lead remained ambiguous.
 
-The integrated version passed [86 automated tests](https://github.com/YousefAlSalqan/vlm-cnn-auditor/actions/runs/44128518913), including isolated PostgreSQL and browser tests. Two frames from the video also passed real-Qwen integration and saved-evidence replay checks. Automated tests establish software behavior, not detection accuracy. See the [iterations and experiment record](docs/PROMPT_LOOP_RESULTS.md) and [verification record](docs/V1_VERIFICATION.md).
+The original integrated version passed [86 automated tests](https://github.com/YousefAlSalqan/vlm-cnn-auditor/actions/runs/44128518913), including isolated PostgreSQL and browser tests. Two frames from the video also passed real-Qwen integration and saved-evidence replay checks. Automated tests establish software behavior, not detection accuracy. See the [iterations and experiment record](docs/PROMPT_LOOP_RESULTS.md) and [verification record](docs/V1_VERIFICATION.md). The new dataset workflow has separate [synthetic verification and live-test limitations](docs/DATASET_VERIFICATION.md).
 
-This is an experimental local application. General accuracy, full-video review time and business savings remain unmeasured. It does not automatically correct YOLO, retrain models or produce approved training labels. A 27-second video at 30 fps produces 162 analyzed frames, so regional Qwen review can take substantially longer than the video itself.
+This is an experimental local application. General accuracy, full-video review time and business savings remain unmeasured. Finding decisions preserve the original detector outputs. Dataset training requires explicit whole-frame review and approval, and candidate weights are saved separately from the active model. A 27-second video at 30 fps produces 162 analyzed frames, so regional Qwen review can take substantially longer than the video itself.
 
 ## Run it
 
@@ -38,6 +40,7 @@ The stack is Python, Gradio, OpenCV/FFprobe, YOLO11n, Qwen3-VL 2B through local 
 - [Architecture, database diagram and synchronized storage](docs/ARCHITECTURE.md)
 - [Prompt iterations and observed results](docs/PROMPT_LOOP_RESULTS.md)
 - [Setup, testing and recovery](docs/V1_GUIDE.md)
+- [Local dataset review and fine-tuning](docs/DATASET_REVIEW.md)
 - [Future improvements](docs/ROADMAP.md)
 - [Full documentation index](docs/README.md)
 

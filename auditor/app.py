@@ -13,6 +13,7 @@ from filelock import FileLock, Timeout
 
 from auditor.config import Settings
 from auditor.contracts import FrameKey
+from auditor.dataset_ui import build_dataset_panel
 from auditor.db import create_engine_for, require_schema
 from auditor.evidence import (
     analysis_running,
@@ -604,6 +605,19 @@ def build_app(settings: Settings, engine, *, detector=None, reviewer=None):
             inputs=sessions,
             outputs=[export_file, export_message],
             concurrency_id="export",
+            concurrency_limit=1,
+            api_visibility="private",
+        )
+        dataset_hook, dataset_inputs, dataset_outputs = build_dataset_panel(
+            settings,
+            sessions,
+            lambda selected: export_session(engine, settings.data_root, UUID(selected)),
+        )
+        start_event.then(
+            dataset_hook,
+            inputs=dataset_inputs,
+            outputs=dataset_outputs,
+            concurrency_id="dataset-review",
             concurrency_limit=1,
             api_visibility="private",
         )

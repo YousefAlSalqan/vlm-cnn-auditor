@@ -10,6 +10,8 @@ Start with the [project README](../README.md) for the current application. The d
 | [Setup and test guide](V1_GUIDE.md) | Dependencies, running the app, a manual test, export and recovery. |
 | [Verification record](V1_VERIFICATION.md) | Automated and real-model checks, what each establishes and what remains unverified. |
 | [Prompt iterations and results](PROMPT_LOOP_RESULTS.md) | Why the prompt changed, crop controls, observations and limitations. |
+| [Reviewed cup datasets](DATASET_REVIEW.md) | Optional local annotations, whole-frame review, frozen releases and candidate training. |
+| [Dataset verification](DATASET_VERIFICATION.md) | Synthetic checks, browser evidence and remaining live-test gaps. |
 
 ## Future work
 

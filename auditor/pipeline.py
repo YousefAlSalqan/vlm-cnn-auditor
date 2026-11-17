@@ -319,6 +319,11 @@ def run_analysis(
         raise AuditorError(
             "Another analysis is running. Wait for it to finish or request cancellation."
         ) from exc
+    if (root / ".dataset-qwen-pause.json").exists():
+        global_lock.release()
+        raise AuditorError(
+            "A dataset Qwen request may still be running. Restart Qwen and clear the pause in the dataset panel first."
+        )
     started = time.monotonic()
     try:
         with session_lock(root, session_id):

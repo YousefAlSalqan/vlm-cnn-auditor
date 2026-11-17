@@ -2,6 +2,8 @@
 
 This release implements the local upload, analysis, review and export flow approved after planning. Eight operational tables are present. Independent annotations, adjudication and reviewer trials remain future work. Accepting a Qwen suggestion is a judgment, not an independently verified label. The original plans remain design references.
 
+This branch also offers a [local dataset review and fine-tuning workflow](DATASET_REVIEW.md). Its toggle starts OFF. It creates model-assisted cup labels that a person reviews before approval. Independent reference annotation and adjudication remain separate work.
+
 ## Manual test
 
 1. Run `start-auditor.cmd` from the checkout. Open http://127.0.0.1:7860.
@@ -137,6 +139,6 @@ The later pilot can use up to eight clips across the four conditions, with two p
 
 - One local user, one active analysis, latest 50 sessions in the UI.
 - Up to 200 MiB, 15–30 seconds, 1080p long edge 1920 and 3600 source frames. New stride-five sessions contain at most 720 frames, all selected for Qwen. Try H.264 SDR first. HDR and arbitrary-angle rotation are rejected.
-- No automatic phone sync, cloud fallback, corrected boxes, retraining, accounts, reference-label editor, business dashboard or automatic evidence deletion.
+- No automatic phone sync, cloud fallback, accounts, independent reference-label editor, business dashboard or automatic evidence deletion. Optional corrected boxes and candidate training require the separate dataset workflow and explicit review.
 - Loaded JSON history is capped at 16 MiB per frame during ZIP verification. Larger histories need a later streaming verifier.
 - Speed, accuracy and business usefulness depend on actual footage and hardware. Qwen can agree with a wrong YOLO result.

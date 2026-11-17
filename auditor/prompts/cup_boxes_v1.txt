@@ -1,0 +1,7 @@
+Locate individual visible cups and mugs in this image, including handles within each box.
+Return only JSON: {"units":"normalized_1000","boxes":[[x1,y1,x2,y2],...]}.
+Coordinates are integers from 0 to 1000 relative to THIS image, with origin at its top left.
+Use one tight box per cup. Include partially visible cups using their visible extent.
+Do not box shelves, groups of cups, bottles, bowls or drawings of cups.
+Return at most 16 boxes. When unsure, omit the uncertain object. If none are visible, return an empty boxes array.
+Your output is a proposal for human review, never ground truth.

@@ -1,8 +1,8 @@
 # Reviewed cup dataset and opt-in fine-tuning implementation plan
 
-> **For implementation after plan review:** Work inline in this isolated branch. Do not delegate to subagents in this side conversation. Checkboxes describe future work, not completed features.
+> **Implementation record:** Work is isolated to this branch and was completed inline without subagents. The original tasks are listed below. Software checks and the remaining live pilot are distinguished explicitly.
 
-**Status:** Proposed plan. Only this document is written now. No application changes, database connections, inference, dataset generation, training, service installation or deployment have occurred.
+**Status:** Implemented on the isolated branch after the owner requested implementation and confirmed local storage. Checks use synthetic exports, fake model responses and fake training. Live inference and training on the target laptop remain unverified. See [usage](../../DATASET_REVIEW.md) and [verification](../../DATASET_VERIFICATION.md).
 
 **Goal:** Build a consolidated cup-annotation draft from saved YOLO/Qwen evidence, let a human correct and approve it, then automatically fine-tune from existing weights when the workflow is enabled.
 
@@ -10,7 +10,7 @@
 
 **Tech stack:** Existing Python, Gradio, Pydantic, OpenCV, HTTPX, FileLock and Ultralytics. Reuse existing model weights and Ollama. No separate annotation service, cloud agent, third model or database migration in the first version.
 
-**Spec:** The confirmed requirements and control behavior below are the request basis. Implementation requires the owner's review of this plan first.
+**Spec:** The confirmed requirements and control behavior below are the request basis. The planning commit precedes application code on this branch.
 
 ## Confirmed requirements and selected defaults
 
@@ -74,8 +74,9 @@ Always show proposal origin, whether a box was changed, the Qwen hint and the ra
 Use a dedicated subtree beneath `DATA_ROOT/datasets/<dataset_id>/`:
 
 ```text
-source_manifest.json      # verified export identities and source hashes
 draft.json               # proposals, frame keys, origins and unresolved hints
+images/                  # immutable raw frame copies
+sources/                 # immutable original JSON snapshots
 revisions/               # append-only human edits and frame-completion decisions
 releases/<version>/      # frozen approved manifest, raw images, labels and data.yaml
 jobs/<job_id>/           # base checkpoint hash, training config, logs and new weights
@@ -121,47 +122,49 @@ The candidate's internal cup class 0 is different from the app's canonical class
 | `auditor/localization.py`, `auditor/prompts/cup_boxes_v1.txt` | Optional bounded Qwen localization requests and host-owned box transforms. Existing prompts remain unchanged. |
 | `auditor/training.py` | Immutable job spec, one owned worker, checkpoint initialization, training/evaluation and result artifacts. Lazy-load training libraries. |
 | `auditor/dataset_ui.py` | New Gradio controls and dataset-only box editor/review interactions. |
-| `auditor/app.py`, `auditor/config.py` | Mount the optional panel and default-OFF settings. Preserve the existing analysis configuration and current flows. |
+| `auditor/app.py` | Mount the optional panel. The master toggle starts OFF in app memory, without new configuration or changes to analysis settings. |
+| `auditor/pipeline.py` | Reject new model work when a dataset localization call has left a durable uncertainty pause. No database state changes on that preflight failure. |
 
 No changes to `auditor/db.py`, migrations, existing prediction contracts or `auditor/models.py` are required for a training-candidate-only version. Reuse hashing, safe paths, atomic writes and locks from `storage.py`. Do not create a second pipeline or generic plugin framework.
 
-## Implementation tasks after review
+## Implementation tasks
 
 ### 1. Build the draft and human annotation records
 
 **Interfaces:** `build_draft(source_zips: list[Path], dataset_root: Path) -> DraftDataset`, `save_frame_review(dataset_id, frame_key, expected_revision, boxes, disposition) -> int`, and `freeze_release(dataset_id, expected_revision, training_spec) -> Path`. Define their strict records in `datasets.py`. Disposition is `complete`, `reviewed_negative` or `exclude`.
 
-- [ ] Write failing tests in `tests/test_datasets.py` for source/hash mismatch, class conversion, corrupt input, duplicate frame identity, stale revisions and incomplete negatives.
-- [ ] Implement draft ingestion from verified archives and separate annotation revisions. Keep automatic labels unapproved.
-- [ ] Add checks that the worked normalization example matches exactly and all original source bytes remain unchanged. Run `pytest tests/test_datasets.py -q` to green.
-- [ ] Commit the reviewed dataset core on this branch.
+- [x] Write failing dataset checks for source identity, class conversion, stale revisions and incomplete negatives. Reuse existing export-corruption checks.
+- [x] Implement draft ingestion from verified archives and separate annotation revisions. Keep automatic labels unapproved.
+- [x] Check the normalization example and unchanged source bytes. Run the dataset tests to green.
+- [x] Include the reviewed dataset core in the implementation commit on this branch.
 
 ### 2. Add bounded optional box proposals
 
 **Interface:** `propose_boxes(frame_key, raw_jpeg, source_regions, enabled: bool) -> list[BoxProposal]`. Keep raw request receipts, exact native transforms and unresolved statuses. Disabled mode returns without initializing a model client.
 
-- [ ] Write failing tests in `tests/test_localization.py` for disabled zero-call behavior, normalized-to-native mapping, malformed units/boxes, multi-object output, output limits and uncertain timeouts.
-- [ ] Implement the separate localization prompt using the installed Qwen model and the existing bounded local transport behavior. At most one attempt per selected region in a job, at most three regions per frame and no automatic retry after uncertainty.
-- [ ] Verify unresolved proposals cannot be exported as labels. Run `pytest tests/test_localization.py -q` to green.
+- [x] Write failing localization tests for disabled zero-call behavior, normalized-to-native mapping, malformed units/boxes, multi-object output, output limits and uncertain timeouts.
+- [x] Implement the separate prompt with the unchanged configured Qwen model and existing bounded transport. Limit attempts and preserve uncertain-request pauses.
+- [x] Verify proposals remain pending human review. Run the localization tests to green.
 - [ ] After implementation is separately authorized, compare candidate boxes with a small manually boxed pilot. Record errors and correction effort rather than claiming grounding accuracy from valid JSON.
 
 ### 3. Add the in-app review panel and controls
 
 **Interface:** `build_dataset_panel(settings, source_export_provider)` mounts the dataset workflow without changing existing prediction/finding decisions. Use existing source-export callbacks instead of new SQL tables.
 
-- [ ] Add failing mocked callback/browser checks for the OFF default, child proposal default, manual corner entry, coordinate correction/deletion and frame-completion controls.
-- [ ] Implement the panel with an explicit raw-image display, editable proposal list and approval bound to the displayed revision. Reuse Gradio. Do not install CVAT or another editor service.
-- [ ] Test rapid frame changes, stale clicks, mobile scaling, turning proposals OFF and restarting with the master control OFF. Existing analysis controls must retain their behavior.
-- [ ] Show dataset readiness and the base model/configuration before enabling **Approve dataset and fine-tune**.
+- [x] Add callback/browser checks for the OFF default, child default, manual corners, coordinate correction/deletion and frame completion.
+- [x] Implement the raw-image panel and approval bound to the displayed revision using existing Gradio.
+- [x] Check stale selection/revision guards, mobile scaling, proposals OFF and default-OFF app construction with synthetic data. Live database-backed analysis is not rerun.
+- [x] Show readiness and the base model/configuration before enabling **Approve dataset and fine-tune**.
 
 ### 4. Fine-tune once after approved release
 
 **Interface:** `enqueue_training(release_path: Path, training_spec) -> job_id` and a single worker in `training.py`. A job key is the hash of the approved release, base checkpoint and training configuration. Repeated identical submissions return the existing job.
 
-- [ ] Write failing tests in `tests/test_training.py` for missing/invalid approval, master OFF, source-split leakage, incompatible checkpoints, duplicate enqueue, pending analysis lock and interrupted jobs. Use a fake trainer, not real training in routine tests.
-- [ ] Implement local training in a separate owned process or worker with the existing analysis lock, output only beneath the job directory, cancellation and original-checkpoint hash verification.
-- [ ] Save a new cup-only checkpoint and held-out evaluation. Do not activate it. A failed/cancelled job leaves the previous model and dataset release usable.
-- [ ] Run dataset, localization, training and browser checks, then the repository's isolated test suite. Add one separately authorized small live-training smoke check before claiming the feature works on the target laptop.
+- [x] Check approval inputs, master OFF, source-split leakage, checkpoint mapping, duplicate enqueue, lock contention and interrupted jobs using fake training.
+- [x] Implement the owned local worker/process with the existing lock, job-only outputs, cancellation and checkpoint hash checks.
+- [x] Implement candidate saving and held-out evaluation. Exercise it with a fake model and verify no activation or source changes.
+- [x] Run the dataset, localization, training, browser and isolated repository checks.
+- [ ] Run a separately authorized small live-training smoke check before claiming the feature works on the target laptop.
 
 ## Dependency and complexity review
 
@@ -171,6 +174,6 @@ Index frame/proposal identities and hashes with maps/sets. Ingestion and exact d
 
 ## Completion boundary
 
-The first completed feature must demonstrate default-OFF preservation, automatic/manual cup proposals, exhaustive human frame review, an immutable dataset release, and one fine-tune initialized from existing weights. All original evidence and checkpoints remain preserved. Generalization gains require additional independent footage and measurement.
+The software demonstrates the opt-in review and training path with synthetic inputs and fake models. A live checkpoint initialization and fine-tuning run remain part of the pilot. Source-preservation evidence and coverage limits are recorded in the verification document. Generalization gains require additional independent footage and measurement.
 
-This proposal is ready for owner review. Application code and runtime behavior remain unchanged at this planning stage.
+The implementation is ready for the owner's next local trial. Real inference, real training and candidate activation have not been performed during development.

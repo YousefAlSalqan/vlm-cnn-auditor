@@ -19,7 +19,7 @@ flowchart TB
     Evidence --> Export[Verified session ZIP]
 ```
 
-The arrows show component access. The storage, snapshot and export modules run in the same application process. YOLO completes the sampled-frame stage before Qwen reviews those frames. The models use the same frame keys, not simultaneous calls. One analysis runs at a time. YOLO currently uses CPU. Ollama manages its own available compute. No model training occurs in this flow.
+The arrows show component access. The storage, snapshot and export modules run in the same application process. YOLO completes the sampled-frame stage before Qwen reviews those frames. The models use the same frame keys, not simultaneous calls. One analysis runs at a time. YOLO currently uses CPU. Ollama manages its own available compute. The separate [dataset workflow](DATASET_REVIEW.md) starts OFF and trains a candidate only after human approval. It shares the inference lock and adds local files without changing the eight-table schema.
 
 ## Frame and review flow
 

@@ -26,7 +26,7 @@ def test_unreviewed_and_failed_frames_never_appear_clean(selected, reviews, expe
 def test_ui_constructs_with_the_pinned_gradio_api(engine, app_settings):
     app = build_app(app_settings, engine)
     image_components = [c for c in app.get_config_file()["components"] if c["type"] == "image"]
-    assert len(image_components) == 2
+    assert len(image_components) == 4
 
 
 def test_saved_timestamps_are_serialized_in_utc():
