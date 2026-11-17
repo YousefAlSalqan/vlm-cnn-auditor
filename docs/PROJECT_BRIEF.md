@@ -1,5 +1,7 @@
 # Product and Engineering Brief
 
+> **Original requirements.** This brief records the starting product scope, including later evaluation goals. For implemented behavior, use the [project README](../README.md) and [current architecture](ARCHITECTURE.md). New sessions use regional R1 review on every fifth source frame. Broader rules and evaluation features described below are not all implemented.
+
 ## Goal
 Build a reusable **VLM-assisted CV quality assurance** application. The user's first experiment focuses only on **cup detection** (COCO class 41). The product's business objective is to **reduce manual review and cost per verified detection error**, not merely to maximize VLM agreement with YOLO.
 

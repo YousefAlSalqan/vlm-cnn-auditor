@@ -1,5 +1,7 @@
 # Qwen and YOLO Experiment Loop Implementation Plan
 
+> **Historical experiment plan.** The experiment and subsequent default app integration are complete. Checkboxes below preserve the plan as written. See [the iteration record](../../PROMPT_LOOP_RESULTS.md), [current architecture](../../ARCHITECTURE.md) and [future improvements](../../ROADMAP.md) for the present documentation.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Status:** Proposed plan only. No new model runs, application changes or GitHub publication are authorized by this document itself. The owner requested this plan before starting the loop.

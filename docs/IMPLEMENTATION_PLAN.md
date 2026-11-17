@@ -1,5 +1,7 @@
 # VLM-CNN Auditor Implementation Plan
 
+> **Planning archive.** The body preserves the original milestone design, including legacy sampling and deferred evaluation work. Use [ARCHITECTURE.md](ARCHITECTURE.md) for the implemented system and [ROADMAP.md](ROADMAP.md) for future improvements. New sessions analyze every fifth source frame with both models and use the tested regional cup prompt.
+
 > **V1 implementation amendment, 2026-11-16:** The owner subsequently authorized building the first version. The original plan below is retained. Actual scope is eight operational tables, local Gradio/YOLO/Qwen analysis, human decisions and verified exports. Three independent-evaluation tables and business validation are deferred. See [V1_GUIDE.md](V1_GUIDE.md) for current architecture, dependencies, setup and limits.
 
 > **For agentic workers:** Implement only after a separate implementation request. Use `executing-plans` for task-by-task execution, or `subagent-driven-development` if the user selects that workflow. Track the checkboxes in [DEVELOPMENT_TASKS.md](DEVELOPMENT_TASKS.md).

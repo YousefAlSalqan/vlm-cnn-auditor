@@ -1,5 +1,7 @@
 # Risks and implementation gates
 
+> **Planning risk register.** This document retains the original implementation gates and sources. Current runtime behavior, recovery limits and experimental evidence are described in [ARCHITECTURE.md](ARCHITECTURE.md), [V1_GUIDE.md](V1_GUIDE.md) and [V1_VERIFICATION.md](V1_VERIFICATION.md). The two-image/full-schema approach below is historical. The new default uses raw regional views and a small observation schema.
+
 This register distinguishes verified documentation from untested integration assumptions. Owners are proposed roles for one developer and the local operator. No risk entry authorizes deployment, model downloads, cloud media upload, or application implementation during planning.
 
 | Risk | Consequence | Mitigation and verification gate | Owner |

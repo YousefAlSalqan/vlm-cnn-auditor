@@ -1,4 +1,21 @@
-# Qwen and YOLO experiment results, 2026-11-17
+# Prompt iterations and experiment results
+
+The experiment tested a practical question: can the existing Qwen model produce useful leads when YOLO misses cups? The work changed the question, image views and response contract. It did not train either model. This record preserves the failures and crop-only explanations alongside the useful examples.
+
+## Iteration history
+
+| Stage | Change | What it taught us |
+| --- | --- | --- |
+| Initial application | [Full-frame review prompt](../auditor/prompts/cup_review_v1.txt), raw/overlay images and a structured R1–R4 response with frame/detection references. | A working evidence pipeline did not guarantee additional detections or reliable model-generated references. |
+| Regional audit | [Region-audit prompt](../experiments/prompts/region_audit_v1.txt) explored asking the original review question on smaller views. | Smaller views were worth testing, but the richer review contract still required careful validation. |
+| Cup presence V1 | [Two-field regional prompt](../experiments/prompts/cup_presence_v1.txt) asked whether a cup was visible and why. | Clear mugs became review leads, while storage jars and thermoses exposed false-positive descriptions. |
+| Cup presence V2 | [Stricter prompt](../experiments/prompts/cup_presence_v2.txt) added visible-shape evidence, exclusions, hanging mugs and an explicit `unclear` answer. | Retained useful mug examples and removed two selected container false positives. An additional glass-cup lead remained ambiguous. |
+| Crop controls | Run the same YOLO weights on the identical encoded images given to Qwen. | Hanging-mug and red-handled-mug examples still had zero YOLO cups. The cup-on-saucer example was recovered by cropped YOLO, so it is not evidence of a uniquely VLM benefit. |
+| Default integration | Use the exact tested V2 prompt, let the host supply identity, retain raw receipts, and align both models on every fifth source frame. | Structured suggestions now reach the app and verified exports. Full-video accuracy and review-time improvement remain unmeasured. |
+
+The two-field observation and the application's normalized review are different contracts. The host adds trusted identity and validates derivation rather than asking Qwen to invent identifiers or repairing invalid responses. The current [architecture](ARCHITECTURE.md) documents this boundary.
+
+## Experiment scope, 2026-11-17
 
 **App integration update:** The owner subsequently authorized enabling this regional flow. New app sessions now use `auditor/prompts/cup_presence_v2.txt` by default, with YOLO and Qwen on source indices 0, 5, 10 and so on. The experiment record below describes the evidence used to choose that prompt. See [V1_GUIDE.md](V1_GUIDE.md) for current behavior. Model weights and database schema remain unchanged.
 

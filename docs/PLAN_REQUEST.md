@@ -1,5 +1,7 @@
 # Assignment for cloud Codex planning agent
 
+> **Historical planning request.** The planning and subsequent first implementation have been completed. The instructions below preserve the original assignment. They do not describe the current application status. Start with the [documentation index](README.md) for current architecture, setup, evidence and future work.
+
 You have a clean personal GitHub repository. **First create an implementation plan** for the VLM-CNN Auditor; do not jump into building an overengineered system.
 
 Read `README.md`, `AGENTS.md` and `docs/PROJECT_BRIEF.md` first.

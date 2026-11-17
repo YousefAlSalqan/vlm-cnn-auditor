@@ -1,4 +1,20 @@
-# V1 verification: 2026-11-16
+# Verification record
+
+## Regional default, 2026-11-17
+
+The integrated regional-review version at commit `7f5c6b4628a0be400c3f6f8aaf60ccde4a913741` passed **86 tests** in [GitHub Actions run 44128518913](https://github.com/YousefAlSalqan/vlm-cnn-auditor/actions/runs/44128518913). The run used synthetic footage, fake model responses, a disposable PostgreSQL service and Chromium. Ruff lint and formatting also passed. These checks do not measure real-model accuracy.
+
+Local checks passed 52 tests and skipped 34 database/browser integration tests to avoid opening the owner's database. The full integration cases ran in GitHub's disposable service. A separate read-only browser fixture passed at 1280px and 375px with synchronized observations, loaded image pairs, no horizontal overflow and no page/console errors.
+
+The 27-second test video contained 810 source frames. The production sampler selected 162 matching YOLO/Qwen keys at stride five. Two real-Qwen integration cases, at 8 and 13 seconds, produced validated R1 suggestions and passed reconstruction from saved raw image evidence. This was not a 162-frame live inference run. The model digest, generation settings, weights, private configuration and 82 existing session files were preserved. No local database connection or schema migration was performed for this integration work.
+
+New checks cover regional schema and identity, source-image replay and tamper rejection, tiny-frame bounds, matched stride selection beyond the legacy 60-frame limit, 90-frame persistence/export with mocked regional calls, interrupted-analysis partial exports and strict complete-export selection. See [the experiment record](PROMPT_LOOP_RESULTS.md) for observed leads and ambiguous results.
+
+Independent reference labels, general precision/recall, a complete live run of the new default and measured review-time/business gains remain unverified. See [current architecture](ARCHITECTURE.md) for today's limits and [future work](ROADMAP.md) for the proposed evaluation.
+
+## Original local V1 record, 2026-11-16
+
+The rest of this document is historical evidence for the first implementation. Its sampling limits, branch status and untouched-document hashes describe that date, not the current release. No database or runtime checks described below were repeated as part of the prospect-documentation update.
 
 The local first version passed **65 tests in 62.68 seconds** on Windows with Python 3.11.18, PostgreSQL 16.16 and FFmpeg/FFprobe 8.1.1. Both `AUDITOR_TEST_DATABASE_URL` and `AUDITOR_BROWSER_TESTS=1` were set. There were no skipped tests. Gradio emitted 30 upstream Pandas deprecation warnings during browser execution.
 
@@ -30,4 +46,4 @@ Decode/sampling overhead is linear in source-frame count, with bounded frame buf
 
 Passing tests and clean reviews do not prove preservation for every future input. Personal phone footage, physical devices, independent labels, cup-error precision/recall, full human review timing, business savings and prolonged resource use remain unverified. Another machine still needs its own setup validation. The GitHub Actions workflow uses synthetic models and a disposable PostgreSQL service. Its remote result is separate from the local results recorded here.
 
-Start with the short manual test in [V1_GUIDE.md](V1_GUIDE.md#tonights-test-on-the-prepared-laptop). Keep footage and credentials private.
+Start with the short manual test in [V1_GUIDE.md](V1_GUIDE.md#manual-test). Keep footage and credentials private.

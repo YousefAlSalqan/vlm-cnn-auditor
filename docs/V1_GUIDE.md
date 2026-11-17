@@ -2,7 +2,7 @@
 
 This release implements the local upload, analysis, review and export flow approved after planning. Eight operational tables are present. Independent annotations, adjudication and reviewer trials remain future work. Accepting a Qwen suggestion is a judgment, not an independently verified label. The original plans remain design references.
 
-## Tonight's test on the prepared laptop
+## Manual test
 
 1. Run `start-auditor.cmd` from the checkout. Open http://127.0.0.1:7860.
 2. Record one physical cup in four conditions: normal light, partial occlusion, poor light and an empty scene. Use separate 15–30 second SDR clips, up to 1080p and 200 MiB.
@@ -16,64 +16,15 @@ The prepared laptop has 16 GiB RAM, an i7-11800H and a 4 GiB RTX 3050 Laptop GPU
 
 ## Full flow
 
-```mermaid
-flowchart TD
-    Phone[Phone video] -->|Manual USB transfer| Local[Local MP4 or MOV]
-    Local -->|Save video| Upload[Validate and preserve original]
-    Upload --> Disk[Local session folder]
-    Upload --> DB[(PostgreSQL)]
-    Upload -->|Separate Start analysis| Decode[FFprobe timestamps and sequential OpenCV decode]
-    Decode --> Stride[Keep source indices 0, 5, 10, ...]
-    Stride --> YOLO[YOLO11n cup class 41 on CPU]
-    YOLO --> Pairs[Raw JPEG + overlay + detections]
-    Pairs --> Disk
-    Pairs --> DB
-    Pairs --> Regions[Same frames, raw regional views]
-    Regions --> Qwen[Local Ollama Qwen3-VL 2B]
-    Qwen --> Strict[Validate raw observations and host-scoped findings]
-    Strict --> DB
-    DB --> JSON[Regenerate per-frame JSON]
-    JSON --> Disk
-    DB --> UI[Gradio evidence review]
-    Disk --> UI
-    UI -->|Accept, Reject or Defer| Decisions[Append a separate decision]
-    Decisions --> DB
-    DB --> Export[Reconcile and verify ZIP]
-    Disk --> Export
-```
+Save the video, start analysis, review synchronized evidence, then export the session. The [current architecture](ARCHITECTURE.md) contains the component diagram and complete processing flow.
 
-`app.py` owns the UI, `pipeline.py` sequences analysis, `video.py` handles timing, `models.py` adapts YOLO and Ollama, and `regional.py` derives regional review proposals. `db.py` defines the unchanged schema. `storage.py`, `evidence.py` and `export.py` preserve bytes, publish snapshots and verify exports. V1 has no application API layer, broker or cloud worker.
+`FRAME_STRIDE=5` selects source indices 0, 5, 10 and so on, with up to 720 samples from the 3600-source-frame input bound. YOLO completes the sampled-frame stage before Qwen reviews every one of those frames. Each Qwen review uses raw regional views and can derive an unverified R1 missed-cup lead. The app does not automatically create corrected boxes, training labels or an object count.
 
-Only one analysis runs at a time. `FRAME_STRIDE=5` selects source indices 0, 5, 10 and so on, with up to 720 samples from the existing 3600-source-frame video bound. Qwen reviews every sampled YOLO frame, without a separate twelve-frame budget. Variable-frame-rate clips retain their actual presentation timestamps. The previous time-based sampling and review budget remain available to read legacy configuration. New sessions use the stride default even if an older `.env` still contains `SAMPLE_HZ` or `VLM_BUDGET`.
+Variable-frame-rate clips retain their actual presentation timestamps. Legacy sessions retain their recorded time-based sampling and review budget. New sessions use the stride default even if an older `.env` still contains `SAMPLE_HZ` or `VLM_BUDGET`. Restart the app and upload a new session to use the new default.
 
 ## Actual database architecture
 
-```mermaid
-erDiagram
-    sessions ||--|| videos : preserves
-    sessions ||--o{ frames : owns
-    videos ||--o{ frames : supplies
-    frames ||--o{ yolo_detections : contains
-    frames ||--o{ vlm_reviews : attempts
-    vlm_reviews ||--o{ vlm_findings : proposes
-    vlm_findings ||--o{ finding_detections : references
-    yolo_detections ||--o{ finding_detections : referenced_by
-    vlm_findings ||--o{ review_decisions : judged_by
-    review_decisions o|--o| review_decisions : supersedes
-```
-
-| Table | Stores |
-| --- | --- |
-| `sessions` | Lifecycle, frozen configuration/checksum, revisions, cancellation and metrics |
-| `videos` | Original path/hash/size, codec, source PTS/time base and probe metadata |
-| `frames` | Session/frame key, source index/PTS, elapsed milliseconds, dimensions, pair paths/hashes, snapshot revision and selection |
-| `yolo_detections` | Original cup boxes in native `xyxy` pixels, confidence, ordinal and UUID |
-| `vlm_reviews` | Up to two attempts per frame, request hash, model/prompt/runtime identity, transform, raw response, status and uncertain-runtime recovery |
-| `vlm_findings` | Validated R1–R4 suggestions and evidence, separate from predictions |
-| `finding_detections` | Finding-to-detection links within the same session and frame |
-| `review_decisions` | Append-only application decisions, notes, revision number, idempotency UUID and previous decision |
-
-Yes, these are PostgreSQL tables with real foreign keys. Frame references use `(session_id, frame_id)`. Composite foreign keys prevent crossing sessions when linking videos, reviews, findings or detections. A superseding decision must belong to the same finding. Deletes use `RESTRICT`, without cascading footage deletion. Timestamps are evidence, not unique identifiers. Indexes cover frame order, attempts/status, rules and decision history.
+The app has eight operational PostgreSQL tables with enforced foreign keys. The [database diagram and table guide](ARCHITECTURE.md#postgresql-design) describe the actual schema, composite scope constraints and ordered decision history. Media bytes stay on disk.
 
 Alembic creates eight tables in `0001_core`, then adds uncertain-request recovery in `0002_review_recovery`. The app requires the current revision and never upgrades a schema on startup. `human_annotations`, `reference_adjudications` and `review_trials` are deferred.
 

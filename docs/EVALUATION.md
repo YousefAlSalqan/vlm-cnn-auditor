@@ -1,5 +1,7 @@
 # Evaluation, testing, and business KPIs
 
+> **Proposed evaluation protocol.** Independent reference labels, the evaluation tables and business KPI calculations described below are not implemented in the app. The current regional default produces R1 suggestions without object counts. Adapt the declared sampling and rule scope before running this protocol. See [verification](V1_VERIFICATION.md) for completed checks and [future work](ROADMAP.md) for next steps.
+
 The experiment asks whether Qwen-assisted review finds verified YOLO errors with less human effort and lower cost. Agreement between two models is not accuracy. Human reference labels are separate from model proposals and Accept/Reject clicks.
 
 All thresholds below are proposed pilot settings. There are no measurements or promised savings in this document.
