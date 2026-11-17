@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     yolo_weights: Path | None = None
     sample_hz: float = Field(default=1.0, ge=0.2, le=2.0)
     vlm_budget: int = Field(default=12, ge=1, le=12)
+    frame_stride: int | None = Field(default=5, ge=5, le=5)
     request_timeout: float = Field(default=120.0, ge=1, le=600)
     ffprobe_binary: str = "ffprobe"
     server_port: int = Field(default=7860, ge=1024, le=65535)
@@ -53,8 +54,11 @@ class Settings(BaseSettings):
 
     def analysis_config(self) -> dict:
         return {
-            "sample_hz": self.sample_hz,
-            "vlm_budget": self.vlm_budget,
+            **(
+                {"frame_stride": self.frame_stride}
+                if self.frame_stride is not None
+                else {"sample_hz": self.sample_hz, "vlm_budget": self.vlm_budget}
+            ),
             "yolo": {
                 "model": self.weights_path.name,
                 "class_id": 41,
@@ -72,7 +76,9 @@ class Settings(BaseSettings):
                 "image_long_edge": 1024,
                 "timeout_seconds": self.request_timeout,
             },
-            "prompt_version": "cup_review_v1",
+            "prompt_version": "cup_regions_v1"
+            if self.frame_stride is not None
+            else "cup_review_v1",
             "rule_version": "cup_rules_v1",
             "schema_version": 1,
         }

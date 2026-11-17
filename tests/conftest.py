@@ -45,6 +45,7 @@ def app_settings(tmp_path, engine):
         database_url=engine.url.render_as_string(hide_password=False),
         data_root=tmp_path / "data",
         vlm_budget=12,
+        frame_stride=None,
     )
 
 
@@ -64,6 +65,31 @@ def small_clip(tmp_path):
             "libx264",
             "-preset",
             "ultrafast",
+            str(path),
+        ],
+        check=True,
+    )
+    return path
+
+
+@pytest.fixture
+def phone_clip(tmp_path):
+    path = tmp_path / "phone.mp4"
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-v",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "testsrc2=size=320x240:rate=30:duration=15",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "ultrafast",
+            "-pix_fmt",
+            "yuv420p",
             str(path),
         ],
         check=True,

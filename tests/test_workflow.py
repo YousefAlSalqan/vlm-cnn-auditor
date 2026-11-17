@@ -2,6 +2,7 @@ import json
 from uuid import UUID, uuid4
 from zipfile import ZipFile
 
+import httpx
 import pytest
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -11,6 +12,7 @@ from auditor.db import AuditSession, Decision, Detection, Frame
 from auditor.evidence import create_upload, frame_bundle, record_decision
 from auditor.export import export_session, verify_export
 from auditor.pipeline import run_analysis
+from auditor.regional import RegionalReviewer
 from tests.fakes import FakeDetector, FakeReviewer
 
 pytestmark = pytest.mark.integration
@@ -32,6 +34,100 @@ def test_upload_only_saves_original_until_analysis_is_started(engine, app_settin
     with Session(engine) as db:
         assert db.get(AuditSession, session_id).state == "uploaded"
         assert db.scalar(select(func.count()).select_from(Frame)) == 0
+
+
+def test_stride_five_sends_every_yolo_frame_to_qwen(engine, app_settings, small_clip):
+    settings = app_settings.model_copy(update={"frame_stride": 5, "vlm_budget": 1})
+    session_id = create_upload(engine, settings, small_clip)
+    reviewer = FakeReviewer()
+    list(run_analysis(engine, settings, session_id, detector=FakeDetector(), reviewer=reviewer))
+    with Session(engine) as db:
+        frames = db.scalars(
+            select(Frame).where(Frame.session_id == session_id).order_by(Frame.source_frame_index)
+        ).all()
+        assert [frame.source_frame_index for frame in frames] == [0, 5, 10, 15, 20, 25]
+        assert all(frame.vlm_selected for frame in frames)
+    assert reviewer.calls == 6
+    assert verify_export(export_session(engine, settings.data_root, session_id))
+
+
+def test_yolo_interruption_keeps_new_frame_selected_and_partial_exportable(
+    engine, app_settings, small_clip
+):
+    settings = app_settings.model_copy(update={"frame_stride": 5})
+    session_id = create_upload(engine, settings, small_clip)
+    reviewer = FakeReviewer()
+
+    class InterruptedDetector(FakeDetector):
+        calls = 0
+
+        def detect(self, raw_jpeg):
+            self.calls += 1
+            if self.calls > 1:
+                raise ValueError("Synthetic interruption before Qwen selection")
+            return super().detect(raw_jpeg)
+
+    with pytest.raises(ValueError):
+        list(
+            run_analysis(
+                engine, settings, session_id, detector=InterruptedDetector(), reviewer=reviewer
+            )
+        )
+    with Session(engine) as db:
+        frame = db.get(Frame, (session_id, "frame_000000000"))
+        assert frame.vlm_selected
+    assert reviewer.calls == 0
+    assert verify_export(export_session(engine, settings.data_root, session_id))
+
+
+def test_regional_default_persists_replayable_findings_and_exports(
+    engine, app_settings, phone_clip, monkeypatch
+):
+    import auditor.pipeline as pipeline_module
+
+    settings = app_settings.model_copy(update={"frame_stride": 5})
+    calls = []
+
+    class EmptyDetector(FakeDetector):
+        def detect(self, raw_jpeg):
+            return []
+
+    def handler(request):
+        if request.url.path == "/api/tags":
+            return httpx.Response(
+                200, json={"models": [{"name": settings.ollama_model, "digest": "synthetic"}]}
+            )
+        if request.url.path == "/api/version":
+            return httpx.Response(200, json={"version": "synthetic"})
+        calls.append(json.loads(request.content))
+        return httpx.Response(
+            200,
+            json={
+                "done": True,
+                "message": {
+                    "content": json.dumps(
+                        {
+                            "cup_present": "yes",
+                            "evidence": "Synthetic cup observation for persistence testing.",
+                        }
+                    )
+                },
+            },
+        )
+
+    def default_reviewer(*args, **kwargs):
+        return RegionalReviewer(*args, **kwargs, transport=httpx.MockTransport(handler))
+
+    monkeypatch.setattr(pipeline_module, "RegionalReviewer", default_reviewer)
+    session_id = create_upload(engine, settings, phone_clip)
+    progress = list(run_analysis(engine, settings, session_id, detector=EmptyDetector()))
+    assert "review_ready" in progress[-1]
+    assert len(calls) == 270
+    key = FrameKey(session_id=session_id, frame_id="frame_000000000", timestamp_ms=0)
+    bundle = frame_bundle(engine, settings.data_root, key)
+    assert bundle["vlm_reviews"][0]["status"] == "validated"
+    assert bundle["vlm_reviews"][0]["findings"][0]["rule_id"] == "R1"
+    assert verify_export(export_session(engine, settings.data_root, session_id))
 
 
 def test_end_to_end_identity_decisions_restart_and_export(engine, app_settings, small_clip):

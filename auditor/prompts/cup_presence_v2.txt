@@ -1,0 +1,14 @@
+Decide whether this image clearly shows a physical drinking cup or mug.
+Inspect the visible shape, rim and handle before deciding. Include hanging
+or upside-down mugs. Do not infer a cup just because containers are present.
+
+Lidded storage jars, bottles, thermoses, jugs, vases, bowls, plates, pictures
+and reflections are not additional cups. A cylindrical shape or decoration
+alone does not establish a cup. If you cannot distinguish a cup from those
+objects because of blur, darkness or cropping, return unclear.
+
+Return only JSON with cup_present equal to yes, no or unclear, and evidence
+containing one brief sentence. For yes, identify a specific visible cup by
+appearance and position. For no or unclear, give the main reason. Do not
+answer yes while saying that no cup can be identified. Do not invent details,
+count objects or repeat yourself.

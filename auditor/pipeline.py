@@ -11,7 +11,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from auditor.config import Settings
-from auditor.contracts import AuditorError, CupDetection, FrameKey, VideoProbe, validate_review
+from auditor.contracts import AuditorError, CupDetection, FrameKey, VideoProbe
 from auditor.db import (
     AuditSession,
     Detection,
@@ -24,6 +24,7 @@ from auditor.db import (
 )
 from auditor.evidence import bump_revision, publish_snapshot, reconcile_session, verify_media
 from auditor.models import PROMPT_SHA256, OllamaReviewer, YoloDetector, render_overlay
+from auditor.regional import PROTOCOL, RegionalReviewer, validate_stored_review
 from auditor.storage import (
     atomic_write,
     canonical_json,
@@ -35,7 +36,9 @@ from auditor.storage import (
 from auditor.video import iter_sampled_frames
 
 
-def select_review_frames(keys: list[FrameKey], budget: int) -> list[FrameKey]:
+def select_review_frames(keys: list[FrameKey], budget: int | None = None) -> list[FrameKey]:
+    if budget is None:
+        return list(keys)
     if not keys:
         return []
     if not 1 <= budget <= 12:
@@ -101,7 +104,7 @@ def _terminal(engine, session_id, state, message=None, elapsed=None):
 
 def _code_digest():
     digest = hashlib.sha256()
-    for name in ("contracts.py", "video.py", "models.py", "pipeline.py"):
+    for name in ("contracts.py", "video.py", "models.py", "regional.py", "pipeline.py"):
         digest.update((Path(__file__).parent / name).read_bytes())
     return digest.hexdigest()
 
@@ -146,7 +149,9 @@ def _confirm_runtime_restart(engine, root):
                 publish_snapshot(engine, root, key)
 
 
-def _commit_frame(engine, root, session_id, video_id, sampled, detections, yolo_ms):
+def _commit_frame(
+    engine, root, session_id, video_id, sampled, detections, yolo_ms, *, select_for_review=False
+):
     directory = session_dir(root, session_id)
     frame_id = sampled.key.frame_id
     raw_path, annotated_path = f"frames/{frame_id}.jpg", f"annotated/{frame_id}.jpg"
@@ -173,6 +178,8 @@ def _commit_frame(engine, root, session_id, video_id, sampled, detections, yolo_
             raw_sha256=raw_hash,
             annotated_sha256=annotated_hash,
             timings={"yolo_wall_ms": yolo_ms},
+            vlm_selected=select_for_review,
+            vlm_skip_reason="same source frames as YOLO" if select_for_review else None,
         )
         db.add(frame)
         db.flush()
@@ -240,8 +247,8 @@ def _begin_review(engine, key, metadata, attempt_no, prepared):
 
 def _save_review(engine, root, key, detections, result, review_id):
     if result.status == "validated":
-        result.response = validate_review(
-            result.raw_response, key, {d.detection_id for d in detections}, len(detections)
+        result.response = validate_stored_review(
+            result.raw_response, key, detections, result.transform
         )
     completed = utcnow()
     with Session(engine) as db, db.begin():
@@ -250,6 +257,8 @@ def _save_review(engine, root, key, detections, result, review_id):
             review is None
             or review.status != "running"
             or review.request_sha256 != result.request_sha256
+            or review.input_transform != result.transform
+            or (review.prompt_version == PROTOCOL) != (result.transform.get("protocol") == PROTOCOL)
         ):
             raise AuditorError("Model request identity differs from its durable dispatch record")
         review.status = result.status
@@ -340,11 +349,20 @@ def run_analysis(
                 bump_revision(db, session_id)
             yield "Loading detector. The original video is saved and protected."
             detector = detector or YoloDetector(settings.weights_path)
-            reviewer = reviewer or OllamaReviewer(
-                settings.ollama_base_url,
-                frozen["qwen"]["model"],
-                frozen["qwen"]["timeout_seconds"],
-            )
+            if reviewer is None:
+                if frozen.get("frame_stride") is not None:
+                    reviewer = RegionalReviewer(
+                        settings.ollama_base_url,
+                        frozen["qwen"]["model"],
+                        frozen["qwen"]["timeout_seconds"],
+                        cancel_check=lambda: _cancelled(engine, session_id),
+                    )
+                else:
+                    reviewer = OllamaReviewer(
+                        settings.ollama_base_url,
+                        frozen["qwen"]["model"],
+                        frozen["qwen"]["timeout_seconds"],
+                    )
             reviewer_metadata = reviewer.identity()
             if prior_frames:
                 if frozen.get("pipeline_code_sha256") != _code_digest():
@@ -389,7 +407,14 @@ def run_analysis(
             directory = session_dir(root, session_id)
             count = 0
             for sampled in iter_sampled_frames(
-                safe_path(directory, original_path), session_id, probe, frozen["sample_hz"]
+                safe_path(directory, original_path),
+                session_id,
+                probe,
+                **(
+                    {"frame_stride": frozen["frame_stride"]}
+                    if frozen.get("frame_stride") is not None
+                    else {"sample_hz": frozen["sample_hz"]}
+                ),
             ):
                 if _cancelled(engine, session_id):
                     _terminal(
@@ -425,6 +450,7 @@ def run_analysis(
                     sampled,
                     detections,
                     round((time.monotonic() - before) * 1000),
+                    select_for_review=frozen.get("frame_stride") is not None,
                 )
                 count += 1
                 yield f"YOLO: {count} sampled frames saved with synchronized evidence."
@@ -441,10 +467,20 @@ def run_analysis(
                     )
                     for f in frames
                 ]
-                selected = {k.frame_id for k in select_review_frames(keys, frozen["vlm_budget"])}
+                selected = {
+                    k.frame_id
+                    for k in select_review_frames(
+                        keys,
+                        None if frozen.get("frame_stride") is not None else frozen["vlm_budget"],
+                    )
+                }
                 for frame in frames:
                     reason = (
-                        "uniform bounded selection"
+                        (
+                            "same source frames as YOLO"
+                            if frozen.get("frame_stride") is not None
+                            else "uniform bounded selection"
+                        )
                         if frame.frame_id in selected
                         else "outside Qwen review budget"
                     )
@@ -510,7 +546,12 @@ def run_analysis(
                         for d in stored
                     ]
                     attempt_no = len(attempts) + 1
-                yield f"Qwen: Reviewing pair {ordinal} of {len(selected)}. A model call may take up to {frozen['qwen']['timeout_seconds']:g} seconds."
+                mode = (
+                    "frame (one to three regional checks)"
+                    if frozen.get("frame_stride") is not None
+                    else "pair"
+                )
+                yield f"Qwen: Reviewing {mode} {ordinal} of {len(selected)}. Each model call may take up to {frozen['qwen']['timeout_seconds']:g} seconds."
                 while attempt_no <= 2:
                     payload, prepared = reviewer.prepare(key, raw, annotated, detections)
                     del payload

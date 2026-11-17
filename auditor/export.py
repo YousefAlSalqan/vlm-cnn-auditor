@@ -15,6 +15,8 @@ from sqlalchemy.orm import Session
 from auditor.contracts import AuditorError, CupDetection, FrameKey, validate_review
 from auditor.db import AuditSession, Frame, Video, VLMReview, utcnow
 from auditor.evidence import reconcile_session, row_dict
+from auditor.regional import PROMPT_SHA256 as REGIONAL_PROMPT_SHA256
+from auditor.regional import PROTOCOL, RegionalReviewer, validate_stored_review
 from auditor.storage import (
     atomic_write,
     canonical_json,
@@ -151,7 +153,7 @@ def verify_export(path: Path) -> bool:
         raise AuditorError("Export contains malformed or inconsistent evidence metadata") from exc
 
 
-def _verify_review_evidence(payload, configuration, detection_ids):
+def _verify_review_evidence(payload, configuration, detection_ids, raw_jpeg=None):
     key = FrameKey.model_validate(
         {name: payload[name] for name in ("session_id", "frame_id", "timestamp_ms")}
     )
@@ -191,7 +193,26 @@ def _verify_review_evidence(payload, configuration, detection_ids):
                 raise AuditorError("An invalid review contains normalized suggestions")
             continue
         validated_count += 1
-        response = validate_review(review["raw_response"], key, detection_ids, len(detection_ids))
+        if review["prompt_version"] == PROTOCOL:
+            if raw_jpeg is None or review["prompt_sha256"] != REGIONAL_PROMPT_SHA256:
+                raise AuditorError("Regional source evidence or prompt identity is unavailable")
+            detections = [CupDetection.model_validate(d) for d in payload["yolo"]["detections"]]
+            verifier = RegionalReviewer(base_url="", model=review["model_tag"])
+            _, prepared = verifier.prepare(key, raw_jpeg, raw_jpeg, detections)
+            if (
+                prepared.request_sha256 != review["request_sha256"]
+                or prepared.transform != review["input_transform"]
+                or (prepared.transform["native_width"], prepared.transform["native_height"])
+                != (payload["image"]["width"], payload["image"]["height"])
+            ):
+                raise AuditorError("Regional requests do not match the exported source image")
+            response = validate_stored_review(
+                review["raw_response"], key, detections, prepared.transform
+            )
+        else:
+            response = validate_review(
+                review["raw_response"], key, detection_ids, len(detection_ids)
+            )
         if (
             review["raw_response_truncated"]
             or any(
@@ -278,8 +299,25 @@ def _verify_export(path: Path) -> bool:
         ):
             raise AuditorError("Original video has an invalid session or path")
         entries = manifest["frames"]
-        if not isinstance(entries, list) or len(entries) > 60:
+        stride = manifest["configuration"].get("frame_stride")
+        if stride is not None and (type(stride) is not int or stride != 5):
+            raise AuditorError("Unsupported exported source-frame stride")
+        if not isinstance(entries, list) or len(entries) > (720 if stride is not None else 60):
             raise AuditorError("Invalid exported frame inventory")
+        if stride is not None:
+            expected_indices = list(range(0, len(video["probe_data"]["timestamps"]), stride))
+            expected_index_set = set(expected_indices)
+            actual_indices = [entry["source_frame_index"] for entry in entries]
+            if (
+                actual_indices != sorted(set(actual_indices))
+                or any(
+                    index not in expected_index_set
+                    or (manifest["complete"] and not entry["vlm_selected"])
+                    for index, entry in zip(actual_indices, entries, strict=True)
+                )
+                or (manifest["complete"] and actual_indices != expected_indices)
+            ):
+                raise AuditorError("YOLO and Qwen frame selection differs from the frozen stride")
         allowlist = {video["original_path"]: "original"}
         frame_ids = set()
         for entry in entries:
@@ -398,7 +436,9 @@ def _verify_export(path: Path) -> bool:
                 ):
                     raise AuditorError("Exported detection box exceeds native frame dimensions")
                 detection_ids.add(parsed.detection_id)
-            _verify_review_evidence(payload, manifest["configuration"], detection_ids)
+            _verify_review_evidence(
+                payload, manifest["configuration"], detection_ids, archive.read(entry["raw_path"])
+            )
             if payload["vlm_selection"]["selected"] != entry["vlm_selected"]:
                 raise AuditorError("Frame review selection differs between snapshot and manifest")
             reviews = payload["vlm_reviews"]

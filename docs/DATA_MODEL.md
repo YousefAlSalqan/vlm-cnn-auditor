@@ -1,5 +1,7 @@
 # Data model and synchronized evidence
 
+> **Regional review update, 2026-11-17:** New app sessions use source-frame stride five and the `cup_regions_v1` raw-response envelope. Existing raw-response, input-transform and runtime-metrics fields retain per-region model strings and request provenance. The normalized `ReviewResponse` and database schema are unchanged. Legacy V1 raw responses remain readable. See [V1_GUIDE.md](V1_GUIDE.md) for current behavior. No migration is required.
+
 > **V1 implementation amendment, 2026-11-16:** The current schema implements `sessions`, `videos`, `frames`, `yolo_detections`, `vlm_reviews`, `vlm_findings`, `finding_detections` and `review_decisions`. Evaluation tables below remain deferred. Alembic migrations and [V1_GUIDE.md](V1_GUIDE.md#actual-database-architecture) describe the actual eight-table schema and recovery fields. The original design remains below for later evaluation work.
 
 This is the proposed V1 persistence contract, not an applied schema. PostgreSQL is canonical for metadata. Media bytes live under one configured local `DATA_ROOT`. JSON is a versioned projection of committed records. [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) defines the processing flow.

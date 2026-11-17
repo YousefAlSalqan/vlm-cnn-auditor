@@ -1,0 +1,9 @@
+Inspect this image for visible physical drinking cups or mugs. Include hanging
+and upside-down mugs. Bowls, plates, jars, bottles, thermoses, pictures and
+reflections are not additional cups. Do not infer hidden or off-screen objects.
+If blur or cropping prevents identification, choose unclear.
+
+Return only JSON with cup_present equal to yes, no or unclear, and evidence
+containing one short sentence about the actual appearance and location.
+Describe what is visible. Do not invent details, repeat yourself or estimate
+a total count.

@@ -12,7 +12,7 @@ This release implements the local upload, analysis, review and export flow appro
 
 V1 does not synchronize the phone automatically. The browser runs on the laptop's loopback address and is not exposed to the phone or internet.
 
-The prepared laptop has 16 GiB RAM, an i7-11800H and a 4 GiB RTX 3050 Laptop GPU. YOLO runs on CPU to leave memory for Qwen. Ollama chooses its available compute. A synthetic cold two-image Qwen check took about 92 seconds. That checks connectivity and image handling, not cup-detection quality or guaranteed throughput. Twelve selected pairs can take several minutes. The default request deadline is 120 seconds per call.
+The prepared laptop has 16 GiB RAM, an i7-11800H and a 4 GiB RTX 3050 Laptop GPU. YOLO runs on CPU to leave memory for Qwen. Ollama chooses its available compute. New sessions analyze every fifth source frame with both models. Each Qwen frame review uses one to three sequential calls, each with a 120-second default deadline. This is offline analysis, not a real-time speed guarantee. A 27-second clip at 30 fps produces 162 analyzed frames and can take substantially longer than the previous twelve-review default.
 
 ## Full flow
 
@@ -23,13 +23,14 @@ flowchart TD
     Upload --> Disk[Local session folder]
     Upload --> DB[(PostgreSQL)]
     Upload -->|Separate Start analysis| Decode[FFprobe timestamps and sequential OpenCV decode]
-    Decode --> YOLO[YOLO11n cup class 41 on CPU]
+    Decode --> Stride[Keep source indices 0, 5, 10, ...]
+    Stride --> YOLO[YOLO11n cup class 41 on CPU]
     YOLO --> Pairs[Raw JPEG + overlay + detections]
     Pairs --> Disk
     Pairs --> DB
-    Pairs --> Select[Uniform selection of up to 12 pairs]
-    Select --> Qwen[Local Ollama Qwen3-VL 2B]
-    Qwen --> Strict[Validate JSON and exact frame references]
+    Pairs --> Regions[Same frames, raw regional views]
+    Regions --> Qwen[Local Ollama Qwen3-VL 2B]
+    Qwen --> Strict[Validate raw observations and host-scoped findings]
     Strict --> DB
     DB --> JSON[Regenerate per-frame JSON]
     JSON --> Disk
@@ -41,9 +42,9 @@ flowchart TD
     Disk --> Export
 ```
 
-`app.py` owns the UI, `pipeline.py` sequences analysis, `video.py` handles timing, and `models.py` adapts YOLO and Ollama. `db.py` defines the schema. `storage.py`, `evidence.py` and `export.py` preserve bytes, publish snapshots and verify exports. V1 has no application API layer, broker or cloud worker.
+`app.py` owns the UI, `pipeline.py` sequences analysis, `video.py` handles timing, `models.py` adapts YOLO and Ollama, and `regional.py` derives regional review proposals. `db.py` defines the unchanged schema. `storage.py`, `evidence.py` and `export.py` preserve bytes, publish snapshots and verify exports. V1 has no application API layer, broker or cloud worker.
 
-Only one analysis runs at a time. Default sampling is 1 Hz, configurable from 0.2–2 Hz, with at most 60 samples. Qwen reviews up to 12 pairs, selected uniformly over saved source-frame order. A budget of at least two includes the first and last samples. All saved samples remain accessible. Unselected means unreviewed.
+Only one analysis runs at a time. `FRAME_STRIDE=5` selects source indices 0, 5, 10 and so on, with up to 720 samples from the existing 3600-source-frame video bound. Qwen reviews every sampled YOLO frame, without a separate twelve-frame budget. Variable-frame-rate clips retain their actual presentation timestamps. The previous time-based sampling and review budget remain available to read legacy configuration. New sessions use the stride default even if an older `.env` still contains `SAMPLE_HZ` or `VLM_BUDGET`.
 
 ## Actual database architecture
 
@@ -94,7 +95,9 @@ DATA_ROOT/
 
 The original is copied with a streaming SHA-256 hash and probed from its saved location. Decoding is sequential. `frame_id` uses source index, never rounded time. `timestamp_ms` is elapsed presentation time from the first presented frame, using the stored rational time base and half-up rounding. Repeated timestamps remain distinct frames. Decreasing timestamps, unsupported metadata and probe/decode count mismatches stop processing.
 
-Canonical raw JPEGs use quality 95 after the recorded quarter-turn rotation is applied once. These are decoded samples, not camera RAW files. Overlays are derived copies. Qwen receives a derivative raw/overlay pair with a maximum long edge of 1024 pixels. Scale and image hashes are recorded. Canonical images retain native dimensions.
+Canonical raw JPEGs use quality 95 after the recorded quarter-turn rotation is applied once. These are decoded samples, not camera RAW files. Overlays are derived copies. The default Qwen prompt is `cup_presence_v2.txt`, promoted unchanged from the tested experiment. Qwen receives raw regional views with a maximum long edge of 1024 pixels. Native region coordinates, scale, image hashes and request hashes are recorded. Canonical images retain native dimensions.
+
+The frame is divided into three horizontal bands. Bands intersecting any existing YOLO box are conservatively skipped, because their cup presence cannot establish a missing detection. If all bands intersect boxes, one full-frame context check still sends this source frame to Qwen and cannot generate R1 by itself. There is no cross-frame reuse of a model result.
 
 PostgreSQL owns searchable metadata and decisions. Pairs are staged, metadata records expected hashes, then files move to final paths before the frame becomes ready. JSON is an atomic derived snapshot of committed rows. DB and filesystem writes cannot share one atomic transaction. Reconciliation recovers valid staged files and regenerates pending snapshots. Conflicting or missing evidence blocks publication/export instead of overwriting bytes.
 
@@ -104,6 +107,8 @@ Saved session evidence is never automatically deleted. Exports contain your foot
 
 ## Qwen rules and recovery
 
+The regional default proposes R1 possible missed cups. R2 through R4 remain readable in older reviews. Positive unboxed regions are grouped into one frame-level R1 finding. The **Qwen observations (unverified)** panel shows the original descriptions by area. A negative or unclear regional response never clears the whole frame. When no R1 candidate is established, the frame receives `insufficient_evidence` and remains available for human review.
+
 | Rule | Meaning |
 | --- | --- |
 | R1 | A visible cup may be missing from detections. No existing detection reference. |
@@ -111,9 +116,9 @@ Saved session evidence is never automatically deleted. Exports contain your foot
 | R3 | Multiple boxes may describe one cup. Reference at least two detections. |
 | R4 | The visible cup count may differ from YOLO's count. |
 
-Strict JSON must identify the exact session/frame/timestamp. `no_issue`, `insufficient_evidence`, invalid output, failed review and unselected frame remain distinct. Only validated output produces findings. Each finding has its own history. A fast frame/finding change cannot save against unloaded evidence.
+The host supplies the exact session/frame/timestamp. Qwen supplies only the diagnostic cup-presence response. Its original strings are retained in a versioned `cup_regions_v1` raw envelope. Saving and exporting replay the raw observations and geometric derivation against the prepared requests. Export also reconstructs the requests from actual source pixels. The normalized `ReviewResponse` contract and database tables are unchanged. Legacy raw responses still use their original strict validator. Each finding retains its own decision history.
 
-Attempts are saved before dispatch. Output is capped at 64 KiB. Invalid schema/reference output can receive one retry, with at most two attempts per frame. Timeouts and uncertain transport interruptions never automatically retry. Closing HTTP does not prove the model stopped.
+Frame attempts are saved before the first regional dispatch. Each HTTP response remains capped at 64 KiB. Regional envelopes contain up to three bounded responses and are limited to 2 MiB during successful replay. Invalid schema output can receive one retry, with at most two frame attempts. Timeouts and uncertain transport interruptions stop before any later regional call and never automatically retry. Closing HTTP does not prove the model stopped. Cancellation is checked between regions as well as frames.
 
 After a timeout, restart Ollama. For a portable process started by this launcher:
 
@@ -180,7 +185,7 @@ The later pilot can use up to eight clips across the four conditions, with two p
 ## Current limits
 
 - One local user, one active analysis, latest 50 sessions in the UI.
-- Up to 200 MiB, 15–30 seconds, 1080p long edge 1920, 3600 source frames, 60 samples and 12 Qwen pairs. Try H.264 SDR first. HDR and arbitrary-angle rotation are rejected.
+- Up to 200 MiB, 15–30 seconds, 1080p long edge 1920 and 3600 source frames. New stride-five sessions contain at most 720 frames, all selected for Qwen. Try H.264 SDR first. HDR and arbitrary-angle rotation are rejected.
 - No automatic phone sync, cloud fallback, corrected boxes, retraining, accounts, reference-label editor, business dashboard or automatic evidence deletion.
 - Loaded JSON history is capped at 16 MiB per frame during ZIP verification. Larger histories need a later streaming verifier.
 - Speed, accuracy and business usefulness depend on actual footage and hardware. Qwen can agree with a wrong YOLO result.

@@ -9,31 +9,6 @@ from auditor.contracts import AuditorError
 from auditor.video import iter_sampled_frames, validate_and_probe
 
 
-@pytest.fixture
-def phone_clip(tmp_path):
-    path = tmp_path / "phone.mp4"
-    subprocess.run(
-        [
-            "ffmpeg",
-            "-v",
-            "error",
-            "-f",
-            "lavfi",
-            "-i",
-            "testsrc2=size=320x240:rate=30:duration=15",
-            "-c:v",
-            "libx264",
-            "-preset",
-            "ultrafast",
-            "-pix_fmt",
-            "yuv420p",
-            str(path),
-        ],
-        check=True,
-    )
-    return path
-
-
 def settings(tmp_path):
     return Settings(
         _env_file=None,
@@ -50,6 +25,21 @@ def test_cfr_sampling_preserves_exact_source_indices_and_timestamps(phone_clip, 
     assert [f.key.timestamp_ms for f in frames] == list(range(0, 15000, 1000))
     assert frames[4].key.frame_id == "frame_000000120"
     assert all(f.key.session_id == session_id and f.raw_jpeg[:2] == b"\xff\xd8" for f in frames)
+
+
+def test_stride_five_uses_source_indices_without_the_old_sixty_frame_cap(phone_clip, tmp_path):
+    probe = validate_and_probe(phone_clip, settings(tmp_path))
+    frames = list(iter_sampled_frames(phone_clip, uuid4(), probe, frame_stride=5))
+    assert [f.source_frame_index for f in frames] == list(range(0, 450, 5))
+    assert len(frames) == 90
+    assert frames[1].key.timestamp_ms == 167
+
+
+def test_new_session_defaults_align_both_models_on_stride_five(tmp_path):
+    config = settings(tmp_path).analysis_config()
+    assert config["frame_stride"] == 5
+    assert config["prompt_version"] == "cup_regions_v1"
+    assert "vlm_budget" not in config
 
 
 def test_vfr_uses_presentation_time_instead_of_nominal_fps(tmp_path):

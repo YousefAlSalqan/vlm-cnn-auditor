@@ -131,9 +131,18 @@ def validate_and_probe(path: Path, settings: Settings) -> VideoProbe:
         raise AuditorError("The video has incomplete or unsupported timestamp metadata") from exc
 
 
-def iter_sampled_frames(path: Path, session_id: UUID, probe: VideoProbe, sample_hz: float):
-    rate = Fraction(str(sample_hz))
-    if not Fraction(1, 5) <= rate <= 2:
+def iter_sampled_frames(
+    path: Path,
+    session_id: UUID,
+    probe: VideoProbe,
+    sample_hz: float | None = None,
+    *,
+    frame_stride: int | None = None,
+):
+    rate = Fraction(str(sample_hz)) if frame_stride is None else None
+    if frame_stride is not None and (type(frame_stride) is not int or frame_stride != 5):
+        raise AuditorError("Source-frame stride must be five")
+    if rate is not None and not Fraction(1, 5) <= rate <= 2:
         raise AuditorError("Sampling must be between 0.2 and 2 frames per second")
     capture = cv2.VideoCapture(str(path), cv2.CAP_FFMPEG)
     try:
@@ -149,11 +158,16 @@ def iter_sampled_frames(path: Path, session_id: UUID, probe: VideoProbe, sample_
             if not ok:
                 raise AuditorError("Decode count does not match the timestamp metadata")
             elapsed = Fraction((pts - probe.first_pts) * probe.time_base_num, probe.time_base_den)
-            if elapsed < Fraction(target_number, 1) / rate:
-                continue
-            target_number = int(elapsed * rate) + 1
-            if emitted >= 60:
-                raise AuditorError("Video exceeds the 60 sampled-frame limit")
+            if frame_stride is not None:
+                if index % frame_stride:
+                    continue
+            else:
+                if elapsed < Fraction(target_number, 1) / rate:
+                    continue
+                target_number = int(elapsed * rate) + 1
+            limit = 720 if frame_stride is not None else 60
+            if emitted >= limit:
+                raise AuditorError(f"Video exceeds the {limit} sampled-frame limit")
             emitted += 1
             rotations = {
                 90: cv2.ROTATE_90_COUNTERCLOCKWISE,

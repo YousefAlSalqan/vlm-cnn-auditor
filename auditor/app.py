@@ -26,6 +26,7 @@ from auditor.evidence import (
 from auditor.export import export_session
 from auditor.models import OllamaReviewer, decode_image
 from auditor.pipeline import recover_interrupted, request_cancel, run_analysis
+from auditor.regional import region_observations
 from auditor.storage import safe_path, session_dir
 
 CSS = (Path(__file__).parent / "style.css").read_text(encoding="utf-8")
@@ -133,6 +134,9 @@ def build_app(settings: Settings, engine, *, detector=None, reviewer=None):
                     interactive=False,
                     value="Frames appear after analysis. Unreviewed does not mean correct.",
                 )
+                regional_notes = gr.Textbox(
+                    label="Qwen observations (unverified)", interactive=False, lines=4
+                )
                 finding_selector = gr.Dropdown(label="Finding", choices=[], interactive=False)
                 details = gr.Textbox(label="Evidence and explanation", interactive=False, lines=4)
                 note = gr.Textbox(
@@ -178,6 +182,7 @@ def build_app(settings: Settings, engine, *, detector=None, reviewer=None):
             annotated_image,
             frame_heading,
             review_status,
+            regional_notes,
             finding_selector,
             details,
             note,
@@ -200,6 +205,7 @@ def build_app(settings: Settings, engine, *, detector=None, reviewer=None):
                 annotated_image: None,
                 frame_heading: "No frame selected",
                 review_status: message,
+                regional_notes: "",
                 finding_selector: gr.update(choices=[], value=None, interactive=False),
                 details: "",
                 note: gr.update(value="", interactive=False),
@@ -273,7 +279,7 @@ def build_app(settings: Settings, engine, *, detector=None, reviewer=None):
                     "not_reviewed": "Selected, but Qwen has not reviewed this frame. See session diagnostics.",
                     "failed": "Qwen review failed. YOLO evidence remains available for manual inspection.",
                     "no_issue": "Qwen found no suspected issue. This is not a verified human label.",
-                    "insufficient_evidence": "Qwen could not judge this frame. Human inspection is needed.",
+                    "insufficient_evidence": "Qwen did not establish a reviewable error. This frame still needs human inspection.",
                     "findings": "Qwen proposed findings. Verify each against the raw image.",
                 }
                 finding_update = gr.update(choices=choices, interactive=bool(chosen))
@@ -284,6 +290,9 @@ def build_app(settings: Settings, engine, *, detector=None, reviewer=None):
                     annotated_image: cv2.cvtColor(overlay, cv2.COLOR_BGR2RGB),
                     frame_heading: f"Session {selected[:8]} | {frame_id} | {key.timestamp_ms / 1000:.3f}s | source index {bundle['source_frame_index']} | {len(bundle['yolo']['detections'])} YOLO cup boxes",
                     review_status: labels[frame_review_status(bundle)],
+                    regional_notes: region_observations(bundle["vlm_reviews"][-1]["raw_response"])
+                    if bundle["vlm_reviews"]
+                    else "",
                     finding_selector: finding_update,
                     details: f"{chosen['rule_id']}: {chosen['evidence']}\n\n{chosen['explanation']}\n\nDetection IDs: {', '.join(chosen['detection_ids']) or 'none'}"
                     if chosen
@@ -484,7 +493,12 @@ def build_app(settings: Settings, engine, *, detector=None, reviewer=None):
                 if identity.get("model_digest")
                 else "Qwen unavailable; manual review remains supported"
             )
-            return f"{detector_status} | {qwen_status} | {settings.sample_hz:g} frame/s | up to {settings.vlm_budget} Qwen pairs/video"
+            cadence = (
+                "YOLO and Qwen on every 5th source frame | regional cup review"
+                if settings.frame_stride is not None
+                else f"{settings.sample_hz:g} frame/s | up to {settings.vlm_budget} Qwen pairs/video"
+            )
+            return f"{detector_status} | {qwen_status} | {cadence}"
 
         save_event = save.click(
             save_video,
